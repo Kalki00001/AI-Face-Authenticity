@@ -1,0 +1,34 @@
+# ─── Python ───────────────────────────────
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.env
+
+# ─── Models (too large for GitHub) ────────
+backend/models/*.pth
+backend/models/*.onnx
+
+# ─── Temp files ───────────────────────────
+backend/tmp_*.mp4
+backend/tmp_*.jpg
+
+# ─── Node / Frontend ──────────────────────
+node_modules/
+frontend/dist/
+
+# ─── OS files ─────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ─── IDE ──────────────────────────────────
+.vscode/
+.idea/
+
+# ─── HuggingFace model cache ──────────────
+# The downloaded AI model lives in C:\Users\<you>\.cache\huggingface\
+# NOT inside the project folder, so nothing to ignore here

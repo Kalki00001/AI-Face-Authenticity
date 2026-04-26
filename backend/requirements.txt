@@ -1,0 +1,11 @@
+opencv-python
+torch
+torchvision
+numpy
+pillow
+fastapi
+uvicorn
+python-multipart
+pydantic
+onnxruntime
+onnx
