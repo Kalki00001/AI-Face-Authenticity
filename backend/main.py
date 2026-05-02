@@ -11,6 +11,13 @@ import time
 from pydantic import BaseModel
 from typing import Optional
 
+# ──────────────────────────────────────────────────────────────
+#  TruthLens PRO — AI Face Authenticity & Deepfake Detection
+#  Author  : Prasad
+#  Version : 2.0.0
+#  Stack   : FastAPI + ONNX + ViT + YuNet + React
+# ──────────────────────────────────────────────────────────────
+
 current_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(current_dir)
 
@@ -40,7 +47,11 @@ except Exception as e:
     print(f"CRITICAL: {e}")
     sys.exit(1)
 
-app = FastAPI(title="TruthLens Pro API v2")
+app = FastAPI(
+    title="TruthLens Pro API",
+    description="AI-Powered Face Authenticity & Deepfake Detection System by Prasad",
+    version="2.0.0"
+)
 
 app.add_middleware(
     CORSMiddleware,

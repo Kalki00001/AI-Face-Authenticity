@@ -491,7 +491,18 @@ export default function App() {
           </div>
         </div>
       </main>
+
+      {/* Author Footer - visible in every demo/screenshot */}
+      <footer className="border-t border-white/5 px-8 py-3 flex items-center justify-between">
+        <p className="text-[9px] text-white/20 tracking-[0.2em] font-mono">
+          TRUTHLENS PRO v2.0 — BUILT BY <span className="text-[#00ff88]/50 font-bold">PRASAD</span>
+        </p>
+        <p className="text-[9px] text-white/10 font-mono">
+          FastAPI · ONNX · ViT · YuNet · React
+        </p>
+      </footer>
     </div>
+
   );
 }
 
