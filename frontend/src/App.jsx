@@ -203,19 +203,19 @@ export default function App() {
           <div className="p-5 rounded-2xl bg-black/40 border border-white/5 backdrop-blur-xl">
             <p className="text-[9px] text-white/30 tracking-[0.2em] mb-5">SYSTEM METRICS</p>
             <div className="space-y-5">
-              <Metric label="Inference Engine" value={result?.meta?.engine || 'Awaiting...'} icon={<Cpu size={12}/>} />
+              <Metric label="Inference Engine" value={result?.meta?.engine || 'Awaiting...'} icon={<Cpu size={12} />} />
               <Metric label="Processing Latency"
                 value={result?.meta?.inference_ms ? `${Math.round(result.meta.inference_ms)} ms` : '-- ms'}
-                icon={<Activity size={12}/>}
+                icon={<Activity size={12} />}
                 highlight />
               <Metric label="3D Head Pose"
                 value={result?.meta?.pose_3d
                   ? `P:${Math.round(result.meta.pose_3d.pitch)}° Y:${Math.round(result.meta.pose_3d.yaw)}° R:${Math.round(result.meta.pose_3d.roll)}°`
                   : 'Awaiting...'}
-                icon={<Eye size={12}/>} />
+                icon={<Eye size={12} />} />
               <Metric label="FFT Frequency"
                 value={result?.meta?.frequency_fft ? `${result.meta.frequency_fft}` : '--'}
-                icon={<Activity size={12}/>} />
+                icon={<Activity size={12} />} />
             </div>
           </div>
 
@@ -267,7 +267,7 @@ export default function App() {
               {result?.status === 'success' && result.bbox && liveActive && (
                 <motion.div animate={{ x: result.bbox.x, y: result.bbox.y, width: result.bbox.w, height: result.bbox.h }}
                   className="absolute" style={{ transition: 'all 0.15s ease' }}>
-                  {['top-0 left-0 border-t-2 border-l-2','top-0 right-0 border-t-2 border-r-2','bottom-0 left-0 border-b-2 border-l-2','bottom-0 right-0 border-b-2 border-r-2']
+                  {['top-0 left-0 border-t-2 border-l-2', 'top-0 right-0 border-t-2 border-r-2', 'bottom-0 left-0 border-b-2 border-l-2', 'bottom-0 right-0 border-b-2 border-r-2']
                     .map((c, i) => <div key={i} className={`absolute w-6 h-6 ${c} ${result.is_real ? 'border-[#00ff88]' : 'border-red-500'}`} />)}
                   <div className={`absolute inset-0 ${result.is_real ? 'bg-[#00ff88]/5' : 'bg-red-500/10'}`} />
                   <div className={`absolute -top-8 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full text-[9px] font-bold border backdrop-blur-md
@@ -359,7 +359,7 @@ export default function App() {
                     {result.frame_results.map((f, i) => (
                       <div key={i} className="flex-1 flex flex-col items-center gap-1 group relative">
                         <div className="absolute -top-6 left-1/2 -translate-x-1/2 hidden group-hover:block text-[9px] bg-black/80 px-1 rounded text-white/60 whitespace-nowrap">
-                          f{f.frame}: {(f.confidence*100).toFixed(0)}%
+                          f{f.frame}: {(f.confidence * 100).toFixed(0)}%
                         </div>
                         <div className={`w-full rounded-t-sm ${f.is_real ? 'bg-[#00ff88]/60' : 'bg-red-500/60'}`}
                           style={{ height: `${f.confidence * 100}%` }} />
@@ -430,15 +430,14 @@ export default function App() {
                         initial={{ width: 0 }}
                         animate={{ width: `${result.confidence * 100}%` }}
                         transition={{ duration: 0.8, ease: 'easeOut' }}
-                        className={`h-full rounded-full ${
-                          result.confidence > 0.75 ? 'bg-gradient-to-r from-[#00cc6a] to-[#00ff88]' :
-                          result.confidence > 0.5 ? 'bg-gradient-to-r from-yellow-500 to-yellow-400' :
-                          'bg-gradient-to-r from-red-700 to-red-500'
-                        }`}
+                        className={`h-full rounded-full ${result.confidence > 0.75 ? 'bg-gradient-to-r from-[#00cc6a] to-[#00ff88]' :
+                            result.confidence > 0.5 ? 'bg-gradient-to-r from-yellow-500 to-yellow-400' :
+                              'bg-gradient-to-r from-red-700 to-red-500'
+                          }`}
                       />
                     </div>
                     <div className="flex justify-between mt-1">
-                      {[0,25,50,75,100].map(v => (
+                      {[0, 25, 50, 75, 100].map(v => (
                         <span key={v} className="text-[8px] text-white/20">{v}%</span>
                       ))}
                     </div>
@@ -482,8 +481,8 @@ export default function App() {
                   <Shield size={48} strokeWidth={1} className="mb-4 opacity-30" />
                   <p className="text-[9px] tracking-widest text-center">
                     {mode === MODES.LIVE ? 'CLICK INITIALIZE TO START' :
-                     mode === MODES.PHOTO ? 'UPLOAD A PHOTO TO ANALYZE' :
-                     'UPLOAD A VIDEO TO ANALYZE'}
+                      mode === MODES.PHOTO ? 'UPLOAD A PHOTO TO ANALYZE' :
+                        'UPLOAD A VIDEO TO ANALYZE'}
                   </p>
                 </motion.div>
               )}
@@ -495,7 +494,7 @@ export default function App() {
       {/* Author Footer - visible in every demo/screenshot */}
       <footer className="border-t border-white/5 px-8 py-3 flex items-center justify-between">
         <p className="text-[9px] text-white/20 tracking-[0.2em] font-mono">
-          TRUTHLENS PRO v2.0 — BUILT BY <span className="text-[#00ff88]/50 font-bold">PRASAD</span>
+          TRUTHLENS PRO v2.0 — BUILT BY <span className="text-[#00ff88]/50 font-bold">PRASAN</span>
         </p>
         <p className="text-[9px] text-white/10 font-mono">
           FastAPI · ONNX · ViT · YuNet · React
