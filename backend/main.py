@@ -10,13 +10,23 @@ import sys
 import time
 from pydantic import BaseModel
 from typing import Optional
+from dotenv import load_dotenv
 
 # ──────────────────────────────────────────────────────────────
 #  TruthLens PRO — AI Face Authenticity & Deepfake Detection
-#  Author  : Prasad
+#  Author  : Prasan
 #  Version : 2.0.0
 #  Stack   : FastAPI + ONNX + ViT + YuNet + React
 # ──────────────────────────────────────────────────────────────
+
+# Load .env — this file is NOT in the GitHub repo
+load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
+API_KEY = os.getenv("TRUTHLENS_API_KEY", "")
+
+if not API_KEY:
+    print("\n[ERROR] Missing TRUTHLENS_API_KEY in .env file.")
+    print("[ERROR] Server cannot start. Contact the project owner.\n")
+    sys.exit(1)
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(current_dir)
