@@ -9,6 +9,10 @@ import cv2
 import numpy as np
 from PIL import Image
 import time
+import os
+
+# Force HuggingFace Transformers to run strictly offline using cached models
+os.environ["HF_HUB_OFFLINE"] = "1"
 
 # Lazy-loaded model (loads only when first image is analyzed, not at server startup)
 _pipeline = None
@@ -16,14 +20,14 @@ _pipeline = None
 def _get_pipeline():
     global _pipeline
     if _pipeline is None:
-        print("DEBUG: Loading AI-image-detector model (first run, downloading ~300MB to cache)...")
+        print("DEBUG: Loading AI-image-detector model (first run, using cached files)...")
         from transformers import pipeline
         _pipeline = pipeline(
             "image-classification",
             model="Ateeqq/ai-vs-human-image-detector",
             device=-1  # Force CPU to match previous setup
         )
-        print("DEBUG: AI-image-detector model ready!")
+        print("DEBUG: AI-image-detector model ready (OFFLINE MODE)!")
     return _pipeline
 
 def _cv2_to_pil(img: np.ndarray) -> Image.Image:
