@@ -1,5 +1,6 @@
-from fastapi import FastAPI, File, UploadFile
+from fastapi import FastAPI, File, UploadFile, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import uvicorn
 import cv2
 cv2.setNumThreads(4)
@@ -8,25 +9,22 @@ import base64
 import os
 import sys
 import time
+import json
+import hashlib
+import secrets
 from pydantic import BaseModel
 from typing import Optional
 from dotenv import load_dotenv
+import pymongo
 
 # ──────────────────────────────────────────────────────────────
 #  TruthLens PRO — AI Face Authenticity & Deepfake Detection
 #  Author  : Prasan
-#  Version : 2.0.0
+#  Version : 3.0.0
 #  Stack   : FastAPI + ONNX + ViT + YuNet + React
 # ──────────────────────────────────────────────────────────────
 
-# Load .env — this file is NOT in the GitHub repo
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
-API_KEY = os.getenv("TRUTHLENS_API_KEY", "")
-
-if not API_KEY:
-    print("\n[ERROR] Missing TRUTHLENS_API_KEY in .env file.")
-    print("[ERROR] Server cannot start. Contact the project owner.\n")
-    sys.exit(1)
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(current_dir)
@@ -38,14 +36,14 @@ from utils.explain import get_explanation
 from utils.local_ai_detector import detect_ai_image, detect_ai_video
 from utils.advanced import analyze_frequency, get_head_pose
 
-# Try to use fast ONNX detector, fallback to PyTorch
+# ─── Liveness Detector ──────────────────────────────────────────────────────
 ONNX_MODEL = os.path.join(current_dir, "models", "MiniFASNetV2_fast.onnx")
 if os.path.exists(ONNX_MODEL):
     print("DEBUG: Using ONNX (Fast) Liveness Detector")
     from utils.liveness_onnx import LivenessDetectorONNX as LivenessDetector
     liveness_detector = LivenessDetector(ONNX_MODEL)
 else:
-    print("DEBUG: Using PyTorch Liveness Detector (slower - run convert_to_onnx.py to speed up)")
+    print("DEBUG: Using PyTorch Liveness Detector (slower)")
     from utils.liveness import LivenessDetector
     liveness_detector = LivenessDetector("models/2.7_80x80_MiniFASNetV2.pth")
 
@@ -59,8 +57,8 @@ except Exception as e:
 
 app = FastAPI(
     title="TruthLens Pro API",
-    description="AI-Powered Face Authenticity & Deepfake Detection System by Prasad",
-    version="2.0.0"
+    description="AI-Powered Face Authenticity & Deepfake Detection System",
+    version="3.0.0"
 )
 
 app.add_middleware(
@@ -70,11 +68,100 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ─── Helpers ────────────────────────────────────────────────────────────────────
+# ─── Auth System (MongoDB) ───────────────────────────────────────────────────
+
+print("DEBUG: Connecting to Local MongoDB...")
+try:
+    mongo_client = pymongo.MongoClient("mongodb://localhost:27017/", serverSelectionTimeoutMS=2000)
+    mongo_client.server_info() # Trigger connection check
+    db = mongo_client["truthlens"]
+    users_collection = db["users"]
+    sessions_collection = db["sessions"]
+    print("DEBUG: MongoDB Connected Successfully")
+except Exception as e:
+    print(f"CRITICAL: MongoDB Connection Failed. Ensure local MongoDB is running! Error: {e}")
+
+def hash_password(password: str) -> str:
+    salt = "truthlens_salt_v3"
+    return hashlib.sha256(f"{salt}{password}".encode()).hexdigest()
+
+def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer(auto_error=False))):
+    if not credentials:
+        return None
+    token = credentials.credentials
+    session = sessions_collection.find_one({"token": token})
+    if session:
+        return {"email": session["email"], "name": session["name"], "created_at": session["created_at"]}
+    return None
+
+class RegisterRequest(BaseModel):
+    name: str
+    email: str
+    password: str
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+@app.post("/auth/register")
+async def register(req: RegisterRequest):
+    if users_collection.find_one({"email": req.email}):
+        raise HTTPException(status_code=409, detail="Email already registered")
+    if len(req.password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+
+    new_user = {
+        "name": req.name,
+        "email": req.email,
+        "password_hash": hash_password(req.password),
+        "created_at": time.time(),
+        "scans": 0
+    }
+    users_collection.insert_one(new_user)
+
+    # Auto-login after register
+    token = secrets.token_hex(32)
+    sessions_collection.insert_one({
+        "token": token,
+        "email": req.email,
+        "name": req.name,
+        "created_at": time.time()
+    })
+
+    return {"status": "success", "token": token, "name": req.name, "email": req.email}
+
+@app.post("/auth/login")
+async def login(req: LoginRequest):
+    user = users_collection.find_one({"email": req.email})
+    if not user or user.get("password_hash") != hash_password(req.password):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    token = secrets.token_hex(32)
+    sessions_collection.insert_one({
+        "token": token,
+        "email": req.email,
+        "name": user.get("name"),
+        "created_at": time.time()
+    })
+
+    return {"status": "success", "token": token, "name": user.get("name"), "email": req.email}
+
+@app.get("/auth/me")
+async def me(user=Depends(get_current_user)):
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return {"status": "success", "user": user}
+
+@app.post("/auth/logout")
+async def logout(credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer(auto_error=False))):
+    if credentials:
+        sessions_collection.delete_one({"token": credentials.credentials})
+    return {"status": "success"}
+
+# ─── Core Analysis Pipeline ──────────────────────────────────────────────────
 
 def analyze_frame(img: np.ndarray):
-    """Core pipeline: takes a BGR image, returns analysis dict."""
-    # Resize to 320p for speed
+    """Core liveness pipeline: takes a BGR image, returns analysis dict."""
     h, w = img.shape[:2]
     if w > 320:
         scale = 320 / w
@@ -95,20 +182,23 @@ def analyze_frame(img: np.ndarray):
     freq_score = analyze_frequency(face_crop)
     head_pose = get_head_pose(landmarks, img.shape)
 
+    # Silent-Face-Anti-Spoofing label mapping for this ONNX model:
+    # Index 0 = Spoof type 1
+    # Index 1 = Spoof type 2
+    # Index 2 = Real/Live face
     if len(prediction) >= 3:
-        score_real = float(prediction[2])
-        score_fake = float(prediction[0] + prediction[1])
+        score_real = float(prediction[2])   # Index 2 = Real
+        score_fake = float(prediction[0] + prediction[1])  # 0+1 = all spoof types
     else:
         score_fake, score_real = float(prediction[0]), float(prediction[1])
 
-    # FFT Moire penalty for screen spoofs
+    # FFT Moiré penalty for screen spoofs
     if freq_score > 165.0:
         score_real *= 0.5
 
     is_real = score_real > 0.65
     confidence = score_real if is_real else score_fake
-    
-    # Threat level
+
     if score_real > 0.80:
         threat = "VERIFIED"
     elif score_real > 0.55:
@@ -135,14 +225,14 @@ def analyze_frame(img: np.ndarray):
         }
     }
 
-# ─── Routes ─────────────────────────────────────────────────────────────────────
+# ─── Routes ──────────────────────────────────────────────────────────────────
 
 class FrameRequest(BaseModel):
     image: str  # base64 data URL
 
 @app.post("/analyze")
 async def analyze_live(request: FrameRequest):
-    """Live webcam frame analysis."""
+    """Live webcam frame liveness analysis."""
     try:
         header, encoded = request.image.split(",", 1)
         data = base64.b64decode(encoded)
@@ -154,7 +244,7 @@ async def analyze_live(request: FrameRequest):
 
 @app.post("/analyze-image")
 async def analyze_image(file: UploadFile = File(...)):
-    """Static image upload analysis."""
+    """Static image upload liveness analysis."""
     try:
         contents = await file.read()
         nparr = np.frombuffer(contents, np.uint8)
@@ -167,13 +257,9 @@ async def analyze_image(file: UploadFile = File(...)):
 
 @app.post("/analyze-video")
 async def analyze_video(file: UploadFile = File(...)):
-    """
-    Video upload analysis.
-    Samples every 10th frame, analyzes each, returns aggregated verdict.
-    """
+    """Video upload liveness analysis (frame-by-frame)."""
     try:
         contents = await file.read()
-        # Write to temp file (OpenCV needs a file path)
         tmp_path = os.path.join(current_dir, "tmp_video_upload.mp4")
         with open(tmp_path, "wb") as f:
             f.write(contents)
@@ -181,12 +267,12 @@ async def analyze_video(file: UploadFile = File(...)):
         cap = cv2.VideoCapture(tmp_path)
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         fps = cap.get(cv2.CAP_PROP_FPS) or 24
-        sample_every = max(1, int(fps))  # ~1 sample per second
+        sample_every = max(1, int(fps))
 
         frame_results = []
         frame_idx = 0
         analyzed = 0
-        MAX_FRAMES = 20  # Cap at 20 samples for speed
+        MAX_FRAMES = 20
 
         while cap.isOpened() and analyzed < MAX_FRAMES:
             ret, frame = cap.read()
@@ -213,7 +299,6 @@ async def analyze_video(file: UploadFile = File(...)):
         if not frame_results:
             return {"status": "error", "message": "No faces detected in video"}
 
-        # Aggregate verdict
         avg_conf = sum(r["confidence"] for r in frame_results) / len(frame_results)
         real_count = sum(1 for r in frame_results if r["is_real"])
         is_real = real_count > len(frame_results) / 2
@@ -231,7 +316,7 @@ async def analyze_video(file: UploadFile = File(...)):
             "reasons": [
                 f"Analyzed {len(frame_results)} key frames from the video",
                 f"{real_count} frames classified as authentic, {len(frame_results)-real_count} as spoofed",
-                f"Average confidence score: {avg_conf*100:.1f}%"
+                f"Average liveness confidence score: {avg_conf*100:.1f}%"
             ]
         }
     except Exception as e:
@@ -239,13 +324,26 @@ async def analyze_video(file: UploadFile = File(...)):
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "engine": "ONNX" if os.path.exists(ONNX_MODEL) else "PyTorch"}
+    return {
+        "status": "ok",
+        "version": "3.0.0",
+        "engine": "ONNX" if os.path.exists(ONNX_MODEL) else "PyTorch"
+    }
+
+@app.get("/stats")
+async def stats():
+    users = load_users()
+    return {
+        "total_users": len(users),
+        "engine": "ONNX" if os.path.exists(ONNX_MODEL) else "PyTorch",
+        "version": "3.0.0"
+    }
 
 # ─── AI Generation Detection Routes ─────────────────────────────────────────
 
 @app.post("/detect-ai-image")
 async def detect_ai_image_route(file: UploadFile = File(...)):
-    """Detect if an uploaded photo is AI-generated."""
+    """Detect if an uploaded photo is AI-generated using ViT model."""
     try:
         contents = await file.read()
         nparr = np.frombuffer(contents, np.uint8)
@@ -256,12 +354,14 @@ async def detect_ai_image_route(file: UploadFile = File(...)):
         if "error" in result:
             return {"status": "error", "message": result["error"]}
         result["status"] = "success"
+        result["is_real"] = not result["is_ai"]
         result["threat_level"] = "AI GENERATED" if result["is_ai"] else "AUTHENTIC"
         result["reasons"] = [
             f"AI probability score: {result['scores']['ai']*100:.1f}%",
             f"Real/authentic probability: {result['scores']['real']*100:.1f}%",
-            "Detection model: HuggingFace AI-image-detector (umm-maybe)",
-            "Trained to distinguish GAN, Diffusion, and real photography"
+            f"Verdict threshold: AI score must exceed 55% to flag as generated",
+            "Detection model: umm-maybe/AI-image-detector (ViT fine-tuned)",
+            "Trained to detect GAN, Diffusion, and other AI-generation artifacts"
         ]
         return result
     except Exception as e:
@@ -275,7 +375,7 @@ async def detect_ai_video_route(file: UploadFile = File(...)):
         tmp_path = os.path.join(current_dir, "tmp_ai_video.mp4")
         with open(tmp_path, "wb") as f:
             f.write(contents)
-        result = detect_ai_video(tmp_path, max_frames=8)
+        result = detect_ai_video(tmp_path, max_frames=12)
         try:
             os.remove(tmp_path)
         except:
@@ -283,8 +383,8 @@ async def detect_ai_video_route(file: UploadFile = File(...)):
         if "error" in result:
             return {"status": "error", "message": result["error"]}
         result["status"] = "success"
-        result["threat_level"] = "AI GENERATED" if result["is_ai"] else "AUTHENTIC"
         result["is_real"] = not result["is_ai"]
+        result["threat_level"] = "AI GENERATED" if result["is_ai"] else "AUTHENTIC"
         return result
     except Exception as e:
         return {"status": "error", "message": str(e)}
