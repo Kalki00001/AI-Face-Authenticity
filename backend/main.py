@@ -70,16 +70,17 @@ app.add_middleware(
 
 # ─── Auth System (MongoDB) ───────────────────────────────────────────────────
 
-print("DEBUG: Connecting to Local MongoDB...")
+print("DEBUG: Connecting to MongoDB...")
 try:
-    mongo_client = pymongo.MongoClient("mongodb://localhost:27017/", serverSelectionTimeoutMS=2000)
+    mongo_uri = os.getenv("MONGO_URI", "mongodb://localhost:27017/")
+    mongo_client = pymongo.MongoClient(mongo_uri, serverSelectionTimeoutMS=5000)
     mongo_client.server_info() # Trigger connection check
     db = mongo_client["truthlens"]
     users_collection = db["users"]
     sessions_collection = db["sessions"]
     print("DEBUG: MongoDB Connected Successfully")
 except Exception as e:
-    print(f"CRITICAL: MongoDB Connection Failed. Ensure local MongoDB is running! Error: {e}")
+    print(f"CRITICAL: MongoDB Connection Failed. Ensure local MongoDB is running or MONGO_URI is valid! Error: {e}")
 
 def hash_password(password: str) -> str:
     salt = "truthlens_salt_v3"
